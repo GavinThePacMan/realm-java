@@ -39,10 +39,35 @@ public class RealmMultiProcessesTest extends AndroidTestCase {
 
     @SuppressLint("HandlerLeak") // SuppressLint bug, doesn't work
     private class InterProcessHandler extends Handler {
+        // Timeout Watchdog. In case the service crashed or expected response is not returned.
+        // It is very important to feed the dog after the expected message arrived.
+        private final int timeout = 2000;
+        private boolean timeoutFlag = true;
+        private Runnable timeoutRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (timeoutFlag) {
+                    assertTrue("Timeout happened", false);
+                } else {
+                    timeoutFlag = true;
+                    postDelayed(timeoutRunnable, timeout);
+                }
+            }
+        };
+
+        protected void clearTimeoutFlag() {
+            timeoutFlag = false;
+        }
+
+        protected void done() {
+            Looper.myLooper().quit();
+        }
+
         public InterProcessHandler(Runnable startRunnable) {
             super(Looper.myLooper());
             receiverMessenger = new Messenger(this);
             post(startRunnable);
+            postDelayed(timeoutRunnable, timeout);
         }
 
         @Override
@@ -90,6 +115,7 @@ public class RealmMultiProcessesTest extends AndroidTestCase {
             public void run() {
                 try {
                     testRealm = Realm.getInstance(getContext());
+                    assertEquals(testRealm.allObjects(AllTypes.class).size(), 0);
                     testRealm.beginTransaction();
                     testRealm.createObject(AllTypes.class);
                     testRealm.commitTransaction();
@@ -104,7 +130,8 @@ public class RealmMultiProcessesTest extends AndroidTestCase {
             public void handleMessage(Message msg) {
                 super.handleMessage(msg);
                 if (msg.what == InterProcessesService.MSG_CreateInitialRealm_A) {
-                    Looper.myLooper().quit();
+                    clearTimeoutFlag();
+                    done();
                 } else {
                     assertTrue(false);
                 }

@@ -83,5 +83,6 @@ public class InterProcessesService extends Service {
             response(MSG_CreateInitialRealm_A,
                     currentLine() + "expected: " + expected + ", but got " + got);
         }
+        testRealm.close();
     }
 }
